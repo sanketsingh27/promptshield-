@@ -2,15 +2,11 @@
 
 import { useCallback, useRef, useState } from "react";
 
-const SEV = ["calm benign text", "ambiguous pattern, benign intent", "clear injection attempt"];
-
 const vi = (n: number) => ({ "--i": n }) as unknown as React.CSSProperties;
 
 type Verdict = {
   state: "block" | "pass" | "mixed";
   prob: number; // 0..1
-  technique: string;
-  severity: number;
   latency: number;
 };
 
@@ -48,13 +44,29 @@ const SAMPLES: Sample[] = [
   },
 ];
 
-const BENCH = process.env.ACCURACY;
+type Bench = {
+  state: "idle" | "running" | "done" | "error";
+  done: number;
+  total: number;
+  caught: number;
+  attackSamples: number;
+  silent: number;
+  benignTotal: number;
+};
 
-function rule(noul: number, severity: number, technique: string): "block" | "pass" | "mixed" {
+const BENCH_ZERO: Bench = {
+  state: "idle",
+  done: 0,
+  total: 0,
+  caught: 0,
+  attackSamples: 0,
+  silent: 0,
+  benignTotal: 0,
+};
+
+function rule(noul: number): "block" | "pass" | "mixed" {
   if (noul >= 0.8) return "block";
   if (noul < 0.5) return "pass";
-  // unclear band: severity tie-break; a hostile-context pose escalates
-  if (severity >= 2 || technique === "extraction attempt") return "block";
   return "mixed";
 }
 
@@ -63,7 +75,52 @@ export default function Home() {
   const [verdict, setVerdict] = useState<Verdict | null>(null);
   const [status, setStatus] = useState<"idle" | "screening" | "error">("idle");
   const [emptyState, setEmptyState] = useState(false);
+  const [bench, setBench] = useState<Bench>(BENCH_ZERO);
   const latRef = useRef<HTMLSpanElement>(null);
+
+  const runBench = useCallback(async () => {
+    setBench((b) => {
+      if (b.state === "running") return b;
+      return { ...BENCH_ZERO, state: "running" };
+    });
+    try {
+      const res = await fetch("/api/benchmark", { method: "POST" });
+      if (!res.ok) throw new Error(res.status === 409 ? "already running" : "failed");
+      if (!res.body) throw new Error("no stream");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      const handle = (p: Record<string, unknown>) => {
+        if (p.error) {
+          setBench((b) => ({ ...b, state: "error" }));
+          return;
+        }
+        setBench({
+          state: p.finished === true ? "done" : "running",
+          done: Number(p.done ?? 0),
+          total: Number(p.total ?? 0),
+          caught: Number(p.caught ?? 0),
+          attackSamples: Number(p.attackSamples ?? 0),
+          silent: Number(p.silent ?? 0),
+          benignTotal: Number(p.benignTotal ?? 0),
+        });
+      };
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const events = buf.split("\n\n");
+        buf = events.pop() ?? "";
+        for (const ev of events) {
+          const line = ev.trim();
+          if (!line.startsWith("data: ")) continue;
+          handle(JSON.parse(line.slice(6)));
+        }
+      }
+    } catch {
+      setBench((b) => ({ ...b, state: "error" }));
+    }
+  }, []);
 
   const inspect = useCallback(async () => {
     if (status === "screening") return;
@@ -81,13 +138,11 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: value }),
       });
-      const data: { noul: number; technique: string; severity: number; latency: number; error?: string } = await res.json();
+      const data: { noul: number; latency: number; error?: string } = await res.json();
       if (!res.ok) throw new Error(data?.error || "failed");
       const v: Verdict = {
-        state: rule(data.noul, data.severity, data.technique),
+        state: rule(data.noul),
         prob: data.noul,
-        technique: data.technique,
-        severity: data.severity,
         latency: data.latency,
       };
       setVerdict(v);
@@ -106,14 +161,14 @@ export default function Home() {
       ? `Blocked: prompt injection detected`
       : verdict.state === "pass"
         ? "Released: no injection detected"
-        : "Unclear: severity tie-break"
+        : "Unclear: p(injection) in gray band"
     : "";
   const note = verdict
     ? verdict.state === "block"
       ? "Sandboxed at the middleware. It never reaches the model."
       : verdict.state === "pass"
         ? "No injection signals. Released to the model."
-        : "In the gray band, severity decides. Raw probability shown for honesty."
+        : "In the gray band. Raw probability shown for honesty."
     : "";
 
   return (
@@ -187,10 +242,10 @@ export default function Home() {
 
         <section className="out" aria-live="polite">
           {status === "screening" && (
-            <div className="v-meta">▶ jev-1.13.0 · parallel questions: is_prompt_injection, technique, severity<span style={{ color: "var(--violet)" }}>▌</span></div>
+            <div className="v-meta">▶ jev-1.13.0 · question: is_prompt_injection<span style={{ color: "var(--violet)" }}>▌</span></div>
           )}
           {status === "error" && (
-            <div style={{ color: "var(--red)" }}>▲ screening failed upstream. Check the API gateway credential, then try again.</div>
+            <div style={{ color: "var(--red)" }}>▲ screening failed upstream. Check the TYPESAFE_API_KEY credential, then try again.</div>
           )}
           {emptyState && (
             <div style={{ color: "var(--amber)" }}>▲ Empty state: paste a prompt above, or load a sample to get moving.</div>
@@ -199,8 +254,7 @@ export default function Home() {
             <div className="verdict">
               <div className="v-line"><span className={`v-word ${verdict.state}`}>● {word}</span></div>
               <div className="v-meta">
-                technique: <em>{verdict.technique}</em> &nbsp;·&nbsp; severity: {SEV[verdict.severity]}
-                {"  "}·&nbsp; latency: <em>{verdict.latency}ms</em>
+                latency: <em>{verdict.latency}ms</em>
               </div>
               <div className={`meter ${verdict.state}`}>
                 <div className="track">
@@ -222,7 +276,23 @@ export default function Home() {
 
         <footer className="bench rise" style={vi(6)}>
             <i aria-hidden="true" />
-            <span>Static benchmark · flagged <b style={{ color: "var(--bone)", fontWeight: 500 }}>207 of 250</b> attack samples · silent on <b style={{ color: "var(--green)", fontWeight: 500 }}>312 of 339</b> benign hard negatives</span>
+            {bench.state === "running" ? (
+              <span>
+                Running benchmark · <b style={{ color: "var(--bone)", fontWeight: 500 }}>{bench.done}/{bench.total}</b> ·
+                caught <b style={{ color: "var(--bone)", fontWeight: 500 }}>{bench.caught}</b> · silent <b style={{ color: "var(--green)", fontWeight: 500 }}>{bench.silent}</b>
+              </span>
+            ) : bench.state === "done" ? (
+              <span>
+                Live benchmark · flagged <b style={{ color: "var(--bone)", fontWeight: 500 }}>{bench.caught} of {bench.attackSamples}</b> attack samples · silent on <b style={{ color: "var(--green)", fontWeight: 500 }}>{bench.silent} of {bench.benignTotal}</b> benign hard negatives
+              </span>
+            ) : bench.state === "error" ? (
+              <span style={{ color: "var(--red)" }}>▲ benchmark failed upstream. Try again.</span>
+            ) : (
+              <span>Benchmark not run yet in this session.</span>
+            )}
+            <button className="btn-ghost" onClick={runBench} disabled={bench.state === "running"}>
+              {bench.state === "running" ? `Running ${bench.done}/${bench.total}` : bench.state === "done" ? "Re-run benchmark" : "Run benchmark"}
+            </button>
         </footer>
       </main>
     </>
