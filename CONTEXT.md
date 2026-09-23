@@ -14,7 +14,7 @@ _Avoid_: prediction, decision, classification
 
 **Passed**: The Verdict meaning no injection was detected — the prompt would reach the LLM.
 
-**Unclear**: The Verdict between Blocked and Passed, decided by the severity tie-break; always displays the raw probability.
+**Unclear**: The Verdict between Blocked and Passed, when p(injection) falls in the 0.5–0.8 gray band; always displays the raw probability.
 
 **In-conversation injection**: An injection Attempt where the malicious instruction is buried inside a wider conversation transcript, not the latest message.
 
