@@ -20,6 +20,16 @@ export type BenchmarkProgress = {
   caught: number;
   benignTotal: number;
   silent: number;
+  row?: {
+    i: number;
+    prompt: string;
+    decided: string;
+    expected: string;
+    group: string;
+    src: string;
+    category: string;
+    hit: boolean;
+  };
 };
 
 type Slot = { decided?: string; expected?: string };
@@ -43,27 +53,47 @@ function progressOf(slots: Slot[]): BenchmarkProgress {
   return { done, total, attackSamples, caught, benignTotal, silent };
 }
 
-// 8-lane async pool over the corpus; emits progress after each completed row.
+// Full-batch waves: fire every prompt in a chunk concurrently, then await the
+// chunk before starting the next. Fastest possible turn given the Decisions
+// API takes one state per request.
+const BATCH = 24;
+
 export async function runBenchmark(
   limit: number,
   onProgress: (p: BenchmarkProgress) => void,
 ): Promise<{ slots: Slot[]; rows: Row[] }> {
   const rows = (samples as unknown as Row[]).slice(0, limit);
   const slots: Slot[] = rows.map(() => ({}));
-  let cursor = 0;
-  const lanes = Array.from({ length: 8 }, async () => {
-    for (;;) {
-      const i = cursor++;
-      if (i >= rows.length) return;
-      try {
-        const { decided, expected, index } = await decide(rows[i], i);
-        slots[index] = { decided, expected };
-      } catch {
-        // row failed upstream: leave its slot undetermined; stats skip it
-      }
-      onProgress(progressOf(slots));
+
+  for (let start = 0; start < rows.length; start += BATCH) {
+    const rowsIn = rows.slice(start, start + BATCH).map((row, k) => ({ row, index: start + k }));
+    const settled = await Promise.all(
+      rowsIn.map(async ({ row, index }) => {
+        try {
+          const { decided, expected } = await decide(row, index);
+          slots[index] = { decided, expected };
+          return { index, decided };
+        } catch {
+          return null; // row failed upstream: slot undetermined; stats skip it
+        }
+      }),
+    );
+    for (const spot of settled) {
+      if (!spot) continue;
+      onProgress({
+        ...progressOf(slots),
+        row: {
+          i: spot.index,
+          prompt: rows[spot.index].state.slice(0, 200),
+          decided: spot.decided,
+          expected: slots[spot.index].expected ?? "",
+          group: rows[spot.index].group,
+          src: rows[spot.index].src,
+          category: rows[spot.index].category ?? "",
+          hit: spot.decided === slots[spot.index].expected,
+        },
+      });
     }
-  });
-  await Promise.all(lanes);
+  }
   return { slots, rows };
 }
