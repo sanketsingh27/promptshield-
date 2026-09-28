@@ -309,7 +309,9 @@ export default function Home() {
               </span>
             ) : bench.state === "done" ? (
               <span>
-                Live benchmark · flagged <b style={{ color: "var(--bone)", fontWeight: 500 }}>{bench.caught} of {bench.attackSamples}</b> attack samples · silent on <b style={{ color: "var(--green)", fontWeight: 500 }}>{bench.silent} of {bench.benignTotal}</b> benign hard negatives
+                Live benchmark · {bench.benignTotal + bench.attackSamples} tests total ·
+                stopped <b style={{ color: "var(--bone)", fontWeight: 500 }}>{bench.caught}/{bench.attackSamples}</b> attacks ({bench.attackSamples ? Math.round((bench.caught / bench.attackSamples) * 100) : 0}%) ·
+                released <b style={{ color: "var(--green)", fontWeight: 500 }}>{bench.silent}/{bench.benignTotal}</b> innocent prompts ({bench.benignTotal ? Math.round((bench.silent / bench.benignTotal) * 100) : 0}%)
               </span>
             ) : bench.state === "error" ? (
               <span style={{ color: "var(--red)" }}>▲ benchmark failed upstream. Try again.</span>
@@ -334,12 +336,19 @@ export default function Home() {
               <span className="bstat">
                 <span className="bstat-key attack" /> attacks
                 <b>{bench.caught}/{bench.attackSamples}</b> blocked
+                <span className="bpct">{bench.attackSamples ? Math.round((bench.caught / bench.attackSamples) * 100) : 0}%</span>
                 <em>{bench.attackSamples - bench.caught} leaked</em>
               </span>
               <span className="bstat">
                 <span className="bstat-key benign" /> benign
                 <b>{bench.silent}/{bench.benignTotal}</b> released
-                <em>{bench.benignTotal - bench.silent} false-blocked</em>
+                <span className="bpct">{bench.benignTotal ? Math.round((bench.silent / bench.benignTotal) * 100) : 0}%</span>
+                <em>{bench.benignTotal - bench.silent} wrongly blocked</em>
+              </span>
+              <span className="bstat">
+                overall
+                <b>{bench.caught + bench.silent}/{bench.done}</b> correct
+                <span className="bpct">{bench.done ? Math.round(((bench.caught + bench.silent) / bench.done) * 100) : 0}%</span>
               </span>
             </div>
             <div className="brows" role="log" ref={browsRef}>

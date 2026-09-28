@@ -169,6 +169,7 @@ textarea.io:focus { outline: none; border-top: 0; }
 .bstats { display: flex; gap: 22px; padding: 8px 16px; border-bottom: 1px solid var(--hairline); font-family: var(--font-geist-mono), monospace; font-size: 11px; color: var(--ash); flex-wrap: wrap; }
 .bstat { display: inline-flex; align-items: baseline; gap: 6px; }
 .bstat b { color: var(--bone); font-weight: 500; }
+.bpct { color: var(--green); margin-left: 1ch; }
 .bstat em { color: var(--amber); font-style: normal; }
 .bstat-key { width: 7px; height: 7px; border-radius: 50%; align-self: center; flex: none; }
 .bstat-key.attack { background: var(--red); }
