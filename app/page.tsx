@@ -338,8 +338,8 @@ export default function Home() {
               </span>
               <span className="bstat">
                 <span className="bstat-key benign" /> benign
-                <b>{bench.benignTotal - bench.silent}/{bench.benignTotal}</b> released
-                <em>{bench.silent} misflagged</em>
+                <b>{bench.silent}/{bench.benignTotal}</b> released
+                <em>{bench.benignTotal - bench.silent} false-blocked</em>
               </span>
             </div>
             <div className="brows" role="log" ref={browsRef}>
