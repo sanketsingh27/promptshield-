@@ -89,7 +89,6 @@ h1 span { color: var(--iron); }
 .term-bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--hairline); }
 .term-bar i { width: 8px; height: 8px; border-radius: 50%; background: var(--hairline); }
 .term-bar .file { margin-left: 8px; font-family: var(--font-geist-mono), monospace; font-size: 12px; color: var(--iron); }
-.term-bar .lat { margin-left: auto; font-family: var(--font-geist-mono), monospace; font-size: 11px; color: var(--green); }
 textarea.io {
   display: block; width: 100%; min-height: 132px; resize: vertical;
   background: transparent; border: 0; padding: 18px;
@@ -147,6 +146,33 @@ textarea.io:focus { outline: none; border-top: 0; }
 .bench i { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: breathe 2.4s ease-in-out infinite; }
 @keyframes breathe { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .bench i { animation: none; } }
+
+/* per-prompt benchmark log: second terminal window */
+.bench-term { margin-top: 16px; border: 1px solid var(--hairline); overflow: hidden; }
+.bench-term .brows { max-height: 260px; overflow-y: auto; padding: 10px 0 12px; font-family: var(--font-geist-mono), monospace; font-size: 11px; line-height: 1.85; scrollbar-width: thin; scrollbar-color: var(--hairline) transparent; }
+.brow { display: flex; gap: 0; align-items: baseline; padding: 0 16px; animation: bin .18s ease-out both; }
+@keyframes bin { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .brow { animation: none; } }
+.brow .bidx { flex: none; width: 4.5ch; color: var(--iron); letter-spacing: 0.06em; }
+.brow .bword { flex: none; width: 7ch; font-weight: 500; letter-spacing: 0.04em; }
+.brow .bword.block { color: var(--red); }
+.brow .bword.pass { color: var(--green); }
+.bshould { flex: none; width: 12ch; color: var(--iron); letter-spacing: 0.03em; white-space: nowrap; }
+.bshould.block { color: var(--iron); }
+.btag { flex: none; color: var(--iron); margin-right: 10px; white-space: nowrap; }
+.bmiss { flex: none; width: 5ch; color: var(--amber); font-weight: 500; letter-spacing: 0.04em; }
+.brow.miss { background: color-mix(in srgb, var(--amber) 7%, transparent); box-shadow: inset 2px 0 0 var(--amber); }
+.bprompt { color: var(--ash); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: auto; min-width: 0; }
+.bcaret { padding: 0 16px; color: var(--violet-glow); animation: breathe 2.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .bcaret { animation: none; } }
+.bench-count { margin-left: auto; font-family: var(--font-geist-mono), monospace; font-size: 11px; color: var(--iron); }
+.bstats { display: flex; gap: 22px; padding: 8px 16px; border-bottom: 1px solid var(--hairline); font-family: var(--font-geist-mono), monospace; font-size: 11px; color: var(--ash); flex-wrap: wrap; }
+.bstat { display: inline-flex; align-items: baseline; gap: 6px; }
+.bstat b { color: var(--bone); font-weight: 500; }
+.bstat em { color: var(--amber); font-style: normal; }
+.bstat-key { width: 7px; height: 7px; border-radius: 50%; align-self: center; flex: none; }
+.bstat-key.attack { background: var(--red); }
+.bstat-key.benign { background: var(--green); }
 
 @media (max-width: 767px) {
   .head { grid-template-columns: 1fr; }

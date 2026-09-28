@@ -1,13 +1,12 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const vi = (n: number) => ({ "--i": n }) as unknown as React.CSSProperties;
 
 type Verdict = {
   state: "block" | "pass" | "mixed";
   prob: number; // 0..1
-  latency: number;
 };
 
 type Sample = {
@@ -44,6 +43,18 @@ const SAMPLES: Sample[] = [
   },
 ];
 
+type Digit = {
+  prompt: string;
+  decided: string;
+  expected: string;
+  group: string;
+  src: string;
+  category: string;
+  hit: boolean;
+};
+
+type DigitBox = Record<number, Digit>;
+
 type Bench = {
   state: "idle" | "running" | "done" | "error";
   done: number;
@@ -76,13 +87,22 @@ export default function Home() {
   const [status, setStatus] = useState<"idle" | "screening" | "error">("idle");
   const [emptyState, setEmptyState] = useState(false);
   const [bench, setBench] = useState<Bench>(BENCH_ZERO);
-  const latRef = useRef<HTMLSpanElement>(null);
+  const [digits, setDigits] = useState<DigitBox>({});
+  const digitsRef = useRef<DigitBox>({});
+  const browsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = browsRef.current;
+    if (el && bench.state === "running") el.scrollTop = el.scrollHeight;
+  }, [digits, bench.state]);
 
   const runBench = useCallback(async () => {
     setBench((b) => {
       if (b.state === "running") return b;
       return { ...BENCH_ZERO, state: "running" };
     });
+    digitsRef.current = {};
+    setDigits({});
     try {
       const res = await fetch("/api/benchmark", { method: "POST" });
       if (!res.ok) throw new Error(res.status === 409 ? "already running" : "failed");
@@ -94,6 +114,19 @@ export default function Home() {
         if (p.error) {
           setBench((b) => ({ ...b, state: "error" }));
           return;
+        }
+        if (p.row) {
+          const row = p.row as Digit & { i: number };
+          digitsRef.current[row.i] = {
+            prompt: row.prompt,
+            decided: row.decided,
+            expected: row.expected,
+            group: row.group,
+            src: row.src,
+            category: row.category,
+            hit: row.hit,
+          };
+          setDigits({ ...digitsRef.current });
         }
         setBench({
           state: p.finished === true ? "done" : "running",
@@ -143,7 +176,6 @@ export default function Home() {
       const v: Verdict = {
         state: rule(data.noul),
         prob: data.noul,
-        latency: data.latency,
       };
       setVerdict(v);
       setStatus("idle");
@@ -176,7 +208,7 @@ export default function Home() {
       <div className="grain" aria-hidden="true" />
       <main className="page">
         <nav className="nav rise" style={vi(0)}>
-          <div className="wordmark"><i aria-hidden="true" />promptshield<span style={{ color: "var(--iron)" }}>/screen</span></div>
+          <div className="wordmark"><i aria-hidden="true" />promptshield</div>
           <a className="navlink" href="https://docs.typesafe.ai">docs.typesafe.ai</a>
         </nav>
 
@@ -214,9 +246,6 @@ export default function Home() {
           <div className="term-bar">
             <i /><i /><i />
             <span className="file">inspect.sh</span>
-            <span className="lat">
-              {status === "screening" ? "screening" : verdict ? verdict.latency + "ms" : "idle"}
-            </span>
           </div>
           <div className="io-wrap">
             <textarea
@@ -253,9 +282,6 @@ export default function Home() {
           {verdict && (
             <div className="verdict">
               <div className="v-line"><span className={`v-word ${verdict.state}`}>● {word}</span></div>
-              <div className="v-meta">
-                latency: <em>{verdict.latency}ms</em>
-              </div>
               <div className={`meter ${verdict.state}`}>
                 <div className="track">
                   <div className="fill" style={{ transform: `scaleX(${verdict.prob})` }} />
@@ -294,6 +320,49 @@ export default function Home() {
               {bench.state === "running" ? `Running ${bench.done}/${bench.total}` : bench.state === "done" ? "Re-run benchmark" : "Run benchmark"}
             </button>
         </footer>
+
+        {Object.keys(digits).length > 0 && (
+          <section className="bench-term rise" aria-label="Per-prompt benchmark decisions">
+            <div className="term-bar">
+              <i /><i /><i />
+              <span className="file">benchmark.log</span>
+              <span className="bench-count" aria-live="off">
+                {bench.done}/{bench.total} decided
+              </span>
+            </div>
+            <div className="bstats" aria-live="polite">
+              <span className="bstat">
+                <span className="bstat-key attack" /> attacks
+                <b>{bench.caught}/{bench.attackSamples}</b> blocked
+                <em>{bench.attackSamples - bench.caught} leaked</em>
+              </span>
+              <span className="bstat">
+                <span className="bstat-key benign" /> benign
+                <b>{bench.benignTotal - bench.silent}/{bench.benignTotal}</b> released
+                <em>{bench.silent} misflagged</em>
+              </span>
+            </div>
+            <div className="brows" role="log" ref={browsRef}>
+              {Object.entries(digits).map(([i, d]) => (
+                <div className={`brow${d.hit ? "" : " miss"}`} key={i}>
+                  <span className="bidx">{String(Number(i)).padStart(4, "0")}</span>
+                  <span className={`bword ${d.decided}`}>
+                    {d.decided === "block" ? "blocked" : "passed"}
+                  </span>
+                  <span className={`bshould ${d.expected}`}>
+                    {d.expected === "block" ? "should block" : "should pass"}
+                  </span>
+                  {!d.hit && <span className="bmiss">miss</span>}
+                  <span className="btag">
+                    {d.src.split(" ")[0]} · {d.group === "attack" ? "attack" : d.category || d.group}
+                  </span>
+                  <span className="bprompt">{d.prompt}</span>
+                </div>
+              ))}
+              {bench.state === "running" && <div className="bcaret">▍</div>}
+            </div>
+          </section>
+        )}
       </main>
     </>
   );
