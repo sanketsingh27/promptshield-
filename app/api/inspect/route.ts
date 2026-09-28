@@ -15,13 +15,9 @@ export async function POST(req: Request) {
     return Response.json({ error: "invalid json" }, { status: 400 });
   }
 
-  const started = Date.now();
   try {
     const answer: Screening = await screenText(state);
-    return Response.json({
-      noul: answer.noul,
-      latency: Date.now() - started,
-    });
+    return Response.json({ noul: answer.noul });
   } catch (err) {
     console.error("openrouter screening failed", err);
     return Response.json({ error: "detection failed" }, { status: 502 });
